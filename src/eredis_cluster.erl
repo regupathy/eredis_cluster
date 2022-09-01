@@ -186,6 +186,7 @@ query(Transaction, Slot, Counter) ->
     Result = eredis_cluster_pool:transaction(Pool, Transaction),
     case handle_transaction_result(Result, Version) of 
         retry -> query(Transaction, Slot, Counter + 1);
+        {retry,NewSlot} -> query(Transaction, NewSlot, Counter + 1);
         Result -> Result
     end.
 
@@ -206,9 +207,12 @@ handle_transaction_result(Result, Version) ->
 
         % Redis explicitly say our slot mapping is incorrect, we need to refresh
         % it
-        {error, <<"MOVED ", _/binary>>} ->
-            eredis_cluster_monitor:refresh_mapping(Version),
-            retry;
+        %{error, <<"MOVED ", _/binary>>} ->
+        %    eredis_cluster_monitor:refresh_mapping(Version),
+        %   retry;
+        {error, <<"MOVED ", Rest/binary>> } ->
+          NewSlot = binary_to_integer(hd(binary:split(Rest,<<" ">>))),
+         {retry,NewSlot};
 
         Payload ->
             Payload
